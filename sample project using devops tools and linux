@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Database Backup Script
+set -e
+
+NAMESPACE=${1:-ecommerce}
+BACKUP_DIR="/opt/backups/mongodb"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+echo "📦 Starting MongoDB backup..."
+
+# Create backup directory
+mkdir -p $BACKUP_DIR
+
+# Get MongoDB pod
+MONGO_POD=$(kubectl get pods -n $NAMESPACE -l app=mongodb -o jsonpath='{.items[0].metadata.name}')
+
+# Create backup
+kubectl exec -n $NAMESPACE $MONGO_POD -- mongodump --out /tmp/backup_$DATE
+kubectl cp $NAMESPACE/$MONGO_POD:/tmp/backup_$DATE $BACKUP_DIR/backup_$DATE
+
+# Compress backup
+tar -czf $BACKUP_DIR/mongodb_backup_$DATE.tar.gz -C $BACKUP_DIR backup_$DATE
+rm -rf $BACKUP_DIR/backup_$DATE
+
+# Clean up old backups (keep last 7 days)
+find $BACKUP_DIR -name "mongodb_backup_*.tar.gz" -mtime +7 -delete
+
+echo "✅ Backup completed: $BACKUP_DIR/mongodb_backup_$DATE.tar.gz"
